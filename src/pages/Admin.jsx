@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { parsePDF } from '../utils/pdfParser'
 
 const EMPTY_Q = { body: '', options: ['', '', '', ''], answer: 0, explanation: '' }
 
@@ -190,6 +191,91 @@ function ImportForm({ password, quizList }) {
   )
 }
 
+function PdfImportForm({ password, quizList }) {
+  const [qId, setQId]       = useState('')
+  const [parsed, setParsed]  = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg]        = useState('')
+  const fileRef              = useRef()
+
+  async function handleFile(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setLoading(true)
+    setMsg('')
+    setParsed(null)
+    try {
+      const buf = await file.arrayBuffer()
+      const qs  = await parsePDF(buf)
+      setParsed(qs)
+      setMsg(`解析完成：共 ${qs.length} 道題目`)
+    } catch (err) {
+      setMsg('解析失敗：' + err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!qId) { setMsg('請選擇測驗'); return }
+    if (!parsed?.length) { setMsg('請先上傳 PDF'); return }
+    const r = await fetch('/api/questions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, quiz_id: Number(qId), questions: parsed })
+    })
+    const data = await r.json()
+    if (!r.ok) { setMsg(data.error); return }
+    setMsg(`✅ 匯入 ${data.inserted} 道題目`)
+    setParsed(null)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  return (
+    <form onSubmit={submit}>
+      {msg && <div className={`alert ${msg.startsWith('✅') ? 'alert-success' : 'alert-error'}`}>{msg}</div>}
+      <div className="field">
+        <label className="label">選擇測驗 *</label>
+        <select className="select" value={qId} onChange={e => setQId(e.target.value)}>
+          <option value="">-- 請選擇 --</option>
+          {quizList.map(q => <option key={q.id} value={q.id}>{q.title}</option>)}
+        </select>
+      </div>
+      <div className="field">
+        <label className="label">上傳 PDF 題庫檔案</label>
+        <input ref={fileRef} type="file" accept=".pdf" className="input" onChange={handleFile} />
+        <p style={{ marginTop: 6, fontSize: '.82rem', color: 'var(--text2)' }}>
+          支援格式：編號 | 題目（含選項）| 答案 | 解析 的表格式 PDF
+        </p>
+      </div>
+      {loading && <div style={{ color: 'var(--text2)', marginBottom: 12 }}>解析中，請稍候...</div>}
+      {parsed && parsed.length > 0 && (
+        <div className="card" style={{ background: '#f8fffe', marginBottom: 16, maxHeight: 300, overflowY: 'auto' }}>
+          <strong style={{ fontSize: '.85rem' }}>預覽（前 5 題）</strong>
+          {parsed.slice(0, 5).map((q, i) => (
+            <div key={i} style={{ marginTop: 10, fontSize: '.82rem', borderTop: i ? '1px solid #eee' : 'none', paddingTop: i ? 8 : 0 }}>
+              <div><strong>Q{i + 1}：</strong>{q.body}</div>
+              <div style={{ color: 'var(--text2)' }}>
+                {q.options.map((o, j) => (
+                  <span key={j} style={{ marginRight: 8, fontWeight: j === q.answer ? 700 : 400 }}>
+                    {String.fromCharCode(65 + j)}) {o}
+                  </span>
+                ))}
+              </div>
+              {q.explanation && <div style={{ color: '#666', marginTop: 4 }}>解析：{q.explanation.slice(0, 60)}...</div>}
+            </div>
+          ))}
+          {parsed.length > 5 && <p style={{ color: 'var(--text2)', marginTop: 8, fontSize: '.82rem' }}>...共 {parsed.length} 題</p>}
+        </div>
+      )}
+      <button className="btn btn-primary" type="submit" disabled={!parsed?.length || loading}>
+        匯入全部 {parsed?.length ? `(${parsed.length} 題)` : ''} 題目
+      </button>
+    </form>
+  )
+}
+
 export default function Admin() {
   const [password, setPassword] = useState('')
   const [authed,   setAuthed]   = useState(false)
@@ -242,11 +328,13 @@ export default function Admin() {
         <div className={`tab-item${tab === 'quiz' ? ' active' : ''}`} onClick={() => setTab('quiz')}>建立測驗</div>
         <div className={`tab-item${tab === 'question' ? ' active' : ''}`} onClick={() => setTab('question')}>新增題目</div>
         <div className={`tab-item${tab === 'import' ? ' active' : ''}`} onClick={() => setTab('import')}>匯入 JSON/CSV</div>
+        <div className={`tab-item${tab === 'pdf' ? ' active' : ''}`} onClick={() => setTab('pdf')}>匯入 PDF</div>
       </div>
       <div className="card">
         {tab === 'quiz'     && <QuizForm     password={password} onCreated={id => { loadQuizzes(); setLastQId(id); setTab('question') }} />}
         {tab === 'question' && <QuestionForm password={password} quizId={lastQId} quizList={quizList} onAdded={loadQuizzes} />}
         {tab === 'import'   && <ImportForm   password={password} quizList={quizList} />}
+        {tab === 'pdf'      && <PdfImportForm password={password} quizList={quizList} />}
       </div>
     </div>
   )

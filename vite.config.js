@@ -5,8 +5,13 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // In dev, proxy /api calls to wrangler pages dev (port 8788)
       '/api': 'http://localhost:8788'
     }
+  },
+  optimizeDeps: {
+    exclude: ['pdfjs-dist']
+  },
+  worker: {
+    format: 'es'
   }
 })
