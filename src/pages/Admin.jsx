@@ -191,6 +191,65 @@ function ImportForm({ password, quizList }) {
   )
 }
 
+function EditQuizForm({ password, quizList, onSaved }) {
+  const [qId, setQId]   = useState('')
+  const [form, setForm] = useState({ title: '', description: '', time_limit: 0 })
+  const [msg, setMsg]   = useState('')
+
+  function selectQuiz(id) {
+    setQId(id)
+    setMsg('')
+    if (!id) return
+    const q = quizList.find(q => String(q.id) === id)
+    if (q) setForm({ title: q.title, description: q.description || '', time_limit: q.time_limit ?? 0 })
+  }
+
+  async function submit(e) {
+    e.preventDefault()
+    if (!qId) { setMsg('請選擇測驗'); return }
+    const r = await fetch(`/api/quiz/${qId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, ...form, time_limit: Number(form.time_limit) })
+    })
+    const data = await r.json()
+    if (!r.ok) { setMsg(data.error); return }
+    setMsg('✅ 更新成功！')
+    onSaved?.()
+  }
+
+  return (
+    <form onSubmit={submit}>
+      {msg && <div className={`alert ${msg.startsWith('✅') ? 'alert-success' : 'alert-error'}`}>{msg}</div>}
+      <div className="field">
+        <label className="label">選擇要編輯的測驗 *</label>
+        <select className="select" value={qId} onChange={e => selectQuiz(e.target.value)}>
+          <option value="">-- 請選擇 --</option>
+          {quizList.map(q => <option key={q.id} value={q.id}>{q.title}</option>)}
+        </select>
+      </div>
+      {qId && <>
+        <div className="field">
+          <label className="label">測驗標題 *</label>
+          <input className="input" required value={form.title}
+            onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+        </div>
+        <div className="field">
+          <label className="label">描述</label>
+          <input className="input" value={form.description}
+            onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+        </div>
+        <div className="field">
+          <label className="label">限時（秒，0 = 無限制）</label>
+          <input className="input" type="number" min="0" value={form.time_limit}
+            onChange={e => setForm(f => ({ ...f, time_limit: e.target.value }))} />
+        </div>
+        <button className="btn btn-primary" type="submit">儲存變更</button>
+      </>}
+    </form>
+  )
+}
+
 function PdfImportForm({ password, quizList }) {
   const [qId, setQId]       = useState('')
   const [parsed, setParsed]  = useState(null)
@@ -329,12 +388,14 @@ export default function Admin() {
         <div className={`tab-item${tab === 'question' ? ' active' : ''}`} onClick={() => setTab('question')}>新增題目</div>
         <div className={`tab-item${tab === 'import' ? ' active' : ''}`} onClick={() => setTab('import')}>匯入 JSON/CSV</div>
         <div className={`tab-item${tab === 'pdf' ? ' active' : ''}`} onClick={() => setTab('pdf')}>匯入 PDF</div>
+        <div className={`tab-item${tab === 'edit' ? ' active' : ''}`} onClick={() => setTab('edit')}>編輯測驗</div>
       </div>
       <div className="card">
         {tab === 'quiz'     && <QuizForm     password={password} onCreated={id => { loadQuizzes(); setLastQId(id); setTab('question') }} />}
         {tab === 'question' && <QuestionForm password={password} quizId={lastQId} quizList={quizList} onAdded={loadQuizzes} />}
         {tab === 'import'   && <ImportForm   password={password} quizList={quizList} />}
         {tab === 'pdf'      && <PdfImportForm password={password} quizList={quizList} />}
+        {tab === 'edit'     && <EditQuizForm  password={password} quizList={quizList} onSaved={loadQuizzes} />}
       </div>
     </div>
   )
