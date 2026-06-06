@@ -1,0 +1,7 @@
+[[ d1_databases ]]
+binding = "DB"
+database_name = "exam-db"
+database_id = "placeholder"   # replaced after `wrangler d1 create exam-db`
+
+[vars]
+ADMIN_PASSWORD = "changeme"   # override in Cloudflare dashboard → Settings → Variables
